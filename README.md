@@ -15,7 +15,6 @@ while node_stack.advance(|node| {
     node.traverse()
 }) {}
 
-
 assert_eq!(node_stack.top().val, 0);
 assert_eq!(node_stack.depth(), 1);
 
