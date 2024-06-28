@@ -1,0 +1,13 @@
+[package]
+name = "mutcursor"
+version = "0.1.0"
+edition = "2021"
+authors = ["Luke Peterson <luke@infoplatter.com>"]
+license = "MIT OR Apache-2.0"
+description = "Safely stores mutable references to parent nodes, for backtracking during traversal of tree & graph structures"
+repository = "https://github.com/luketpeterson/mutcursor/"
+readme = "README.md"
+keywords = ["traversal", "tree", "backtacking", "stack", "cursor"]
+categories = ["no-std", "algorithms", "data-structures", "rust-patterns"]
+
+[dependencies]
