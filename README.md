@@ -5,24 +5,6 @@ This crate provides a type to safely store mutable references to parent nodes, f
 
 ## Usage
 ```rust
-/// A simple stand-in for a recursive graph structure
-struct TreeNode {
-    val: usize,
-    next: Option<Box<TreeNode>>
-}
-impl TreeNode {
-    fn new(count: usize) -> Self {
-        if count > 0 {
-            Self {val: count, next: Some(Box::new(Self::new(count-1)))}
-        } else {
-            Self {val: 0, next: None}
-        }
-    }
-    fn traverse(&mut self) -> Option<&mut Self> {
-        self.next.as_mut().map(|boxed| &mut **boxed)
-    }
-}
-
 use mutcursor::MutCursor;
 
 let mut tree = TreeNode::new(5);
@@ -40,6 +22,24 @@ assert_eq!(node_stack.depth(), 1);
 node_stack.backtrack();
 assert_eq!(node_stack.top().val, 1);
 assert_eq!(node_stack.depth(), 0);
+
+/// A simple stand-in for a recursive graph structure
+struct TreeNode {
+    val: usize,
+    next: Option<Box<TreeNode>>
+}
+impl TreeNode {
+    fn new(count: usize) -> Self {
+        if count > 0 {
+            Self {val: count, next: Some(Box::new(Self::new(count-1)))}
+        } else {
+            Self {val: 0, next: None}
+        }
+    }
+    fn traverse(&mut self) -> Option<&mut Self> {
+        self.next.as_mut().map(|boxed| &mut **boxed)
+    }
+}
 ```
 
 ## Alternative(s)
