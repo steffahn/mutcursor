@@ -4,12 +4,12 @@ extern crate alloc;
 /// Similar to [MutCursor](crate::MutCursor), but allows for a dynamically growing stack
 ///
 /// `MutCursorVec` is not available if the `no_std` feature is set
-pub struct MutCursorVec<'root, T: ?Sized> {
+pub struct MutCursorVec<'root, T: ?Sized + 'root> {
     top: &'root mut T,
     stack: alloc::vec::Vec<*mut T>,
 }
 
-impl<'root, T: ?Sized> MutCursorVec<'root, T> {
+impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
     /// Returns a new `MutCursor` with a reference to the specified root
     #[inline]
     pub fn new(root: &'root mut T) -> Self {

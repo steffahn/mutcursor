@@ -13,14 +13,14 @@ pub use mut_cursor_vec::*;
 /// Stores a stack of `&mut` references, only allowing access to the top element on the stack
 ///
 /// The `MutCursor` stores `N` `&mut T` references, but only allows access to the [top](Self::top)
-pub struct MutCursor<'root, T: ?Sized, const N: usize> {
+pub struct MutCursor<'root, T: ?Sized + 'root, const N: usize> {
     cnt: usize, //The last item cannot be removed, so cnt==0 means there is 1 item
     top: usize,
     stack: [MaybeUninit<*mut T>; N],
     phantom: PhantomData<&'root T>,
 }
 
-impl<'root, T: ?Sized, const N: usize> MutCursor<'root, T, N> {
+impl<'root, T: ?Sized + 'root, const N: usize> MutCursor<'root, T, N> {
     /// Returns a new `MutCursor` with a reference to the specified root
     #[inline]
     pub fn new(root: &'root mut T) -> Self {
