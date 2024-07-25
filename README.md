@@ -1,7 +1,9 @@
 
 # mutcursor
 
-This crate provides a type to safely store mutable references to parent nodes, for backtracking during traversal of tree & graph structures.
+This crate provides types to safely store mutable references to parent nodes, for backtracking during traversal of tree & graph structures.
+
+[MutCursor] is more efficient because it avoids dynamic allocation, while [MutCursorVec] provides for an arbitrarily deep stack.
 
 ## Usage
 ```rust
@@ -43,7 +45,11 @@ impl TreeNode {
 
 ## Alternative(s)
 
-This crate basically does the same thing as [generic-cursors](https://crates.io/crates/generic-cursors). However, this crate opts for a fixed-size stack while `generic-cursors` uses a `Vec`.  That means this crate has lower overhead but `generic-cursors` permits arbitrarily-deep backtracking.
+This crate basically does the same thing as [generic-cursors](https://crates.io/crates/generic-cursors). However, there are several reasons to choose this crate:
+
+1. The fixed-size stack used by [MutCursor] has lower overhead than a [Vec], and can be used in a `no_std` environment where dynamic allocation may be unavailable.
+
+2. The [MutCursor::try_map_into_mut] API enables some paterns that would be otherwise impossible.
 
 ## Safety Thesis
 
