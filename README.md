@@ -5,6 +5,8 @@ This crate provides types to safely store mutable references to parent nodes, fo
 
 [MutCursor] is more efficient because it avoids dynamic allocation, while [MutCursorVec] provides for an arbitrarily deep stack.
 
+[MutCursorRootedVec] supports mutable references to a separate root type and a different leaf type.  In the future I may generalize this pattern to be more flexible.
+
 ## Usage
 ```rust
 use mutcursor::MutCursor;
@@ -69,3 +71,13 @@ let level_1 = &mut root;
     }
 }
 ```
+
+## Future Work
+
+#### Macro to define cursor types
+
+In the current design of [MutCursorRootedVec], there is a predefined pattern prescribing where `RootT` and `NodeT` types may exist on the stack.  However, we may find it necessary in the future to support more than two types, in a more flexible pattern.  It seems that a macro to define a bespoke cursor type is the best solutuion.
+
+#### Internal enum for multiple-type support at runtime
+
+For ultimate flexibility, we would want all the references to be stored by the stack as in an enum over the possible reference types.  However, if ther user provided an enum as a type parameter to a cursor type, the result result would be double-indirection.  Therefore the enum behavior would need to be internal to the MutCursor.  Deriving a MutCursor from a user's enum type feels like a friendly way to define the types a cursor type is capable of storing.

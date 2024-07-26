@@ -10,6 +10,11 @@ mod mut_cursor_vec;
 #[cfg(not(feature = "no_std"))]
 pub use mut_cursor_vec::*;
 
+#[cfg(not(feature = "no_std"))]
+mod rooted_vec;
+#[cfg(not(feature = "no_std"))]
+pub use rooted_vec::*;
+
 /// Stores a stack of `&mut` references, only allowing access to the top element on the stack
 ///
 /// The `MutCursor` stores `N` `&mut T` references, but only allows access to the [top](Self::top)

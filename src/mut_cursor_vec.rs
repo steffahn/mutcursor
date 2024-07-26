@@ -10,7 +10,7 @@ pub struct MutCursorVec<'root, T: ?Sized + 'root> {
 }
 
 impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
-    /// Returns a new `MutCursor` with a reference to the specified root
+    /// Returns a new `MutCursorVec` with a reference to the specified root
     #[inline]
     pub fn new(root: &'root mut T) -> Self {
         Self {
@@ -18,8 +18,8 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
             stack: alloc::vec::Vec::new(),
         }
     }
-    /// Returns a new `MutCursor` with a reference to the specified root, and an allocated buffer for
-    /// `capacity` references
+    /// Returns a new `MutCursorVec` with a reference to the specified root, and an allocated buffer
+    /// for `capacity` references
     #[inline]
     pub fn new_with_capacity(root: &'root mut T, capacity: usize) -> Self {
         Self {
