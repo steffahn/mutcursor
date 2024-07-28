@@ -160,6 +160,14 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
             }
         }
     }
+    /// Pops all references from the stack, exposing the root reference as the [top](Self::top)
+    ///
+    /// This method does nothing if the stack is already at the root
+    #[inline]
+    pub fn to_root(&mut self) {
+        self.stack.truncate(0);
+        self.top = None;
+    }
     /// Private
     #[inline]
     unsafe fn top_mut_internal(&mut self) -> Option<&'root mut NodeT> {

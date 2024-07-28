@@ -96,6 +96,17 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
             None => panic!("MutCursor must contain valid reference")
         }
     }
+    /// Pops all references from the stack, exposing the root reference as the [top](Self::top)
+    ///
+    /// This method does nothing if the stack is already at the root
+    #[inline]
+    pub fn to_root(&mut self) {
+        if self.stack.len() > 0 {
+            self.stack.truncate(1);
+            let top_ptr = self.stack.pop().unwrap();
+            self.top = unsafe{ &mut *top_ptr };
+        }
+    }
     /// Private
     #[inline]
     unsafe fn top_mut_internal(&mut self) -> &'root mut T {
