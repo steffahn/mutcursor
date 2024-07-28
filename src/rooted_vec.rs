@@ -165,7 +165,7 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
     /// This method does nothing if the stack is already at the root
     #[inline]
     pub fn to_root(&mut self) {
-        self.stack.truncate(0);
+        self.stack.clear();
         self.top = None;
     }
     /// Private
