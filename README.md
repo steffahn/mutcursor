@@ -49,7 +49,7 @@ impl TreeNode {
 
 This crate basically does the same thing as [generic-cursors](https://crates.io/crates/generic-cursors). However, there are several reasons to choose this crate:
 
-1. The fixed-size stack used by [MutCursor] has lower overhead than a [Vec], and can be used in a `no_std` environment where dynamic allocation may be unavailable.
+1. The fixed-size stack used by [MutCursor] has lower overhead than a [Vec](https://doc.rust-lang.org/std/vec/struct.Vec.html), and can be used in a `no_std` environment where dynamic allocation may be unavailable.
 
 2. The [MutCursor::try_map_into_mut] API enables some paterns that would be otherwise impossible.
 
