@@ -4,10 +4,13 @@ extern crate alloc;
 /// Similar to [MutCursorVec](crate::MutCursorVec), but provides for a `RootT` type at the bottom of the
 /// stack that is different from the `NodeT` types above it
 ///
+/// `MutCursorRootedVec` doesn't implement [Deref](core::ops::Deref), and accessors return [Option], so therefore it is
+/// allowed to be empty, unlike some of the other types in this crate.
+///
 /// `MutCursorRootedVec` is not available if the `no_std` feature is set
 pub struct MutCursorRootedVec<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> {
     top: Option<&'root mut NodeT>,
-    root: *mut RootT,
+    root: Option<*mut RootT>,
     stack: alloc::vec::Vec<*mut NodeT>,
 }
 
@@ -17,7 +20,7 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
     pub fn new(root: &'root mut RootT) -> Self {
         Self {
             top: None,
-            root,
+            root: Some(root),
             stack: alloc::vec::Vec::new(),
         }
     }
@@ -27,7 +30,7 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
     pub fn new_with_capacity(root: &'root mut RootT, capacity: usize) -> Self {
         Self {
             top: None,
-            root,
+            root: Some(root),
             stack: alloc::vec::Vec::with_capacity(capacity),
         }
     }
@@ -42,7 +45,7 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
     #[inline]
     pub fn root(&self) -> Option<&RootT> {
         if self.top.is_none() {
-            Some(unsafe{ &*self.root })
+            Some(unsafe{ &**self.root.as_ref().unwrap() })
         } else {
             None
         }
@@ -54,13 +57,43 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
         self.top.as_deref()
     }
     /// Returns the mutable reference on the root of the stack, or `None` if the stack contains additional
-    /// nodes obscuring the root
+    /// references obscuring the root
     #[inline]
     pub fn root_mut(&self) -> Option<&mut RootT> {
         if self.top.is_none() {
-            Some(unsafe{ &mut *self.root })
+            match self.root {
+                Some(root) => Some(unsafe{ &mut *root }),
+                None => None
+            }
         } else {
             None
+        }
+    }
+    /// Removes and returns the mutable reference on the root of the stack, or `None` if the
+    /// root has already been taken
+    ///
+    /// This method effectively dumps the entire stack contents.
+    #[inline]
+    pub fn take_root(&mut self) -> Option<&'root mut RootT> {
+        if self.root.is_some() {
+            let mut root = None;
+            core::mem::swap(&mut self.root, &mut root);
+            self.top = None;
+            self.stack.clear();
+            Some(unsafe{ &mut *root.unwrap() })
+        } else {
+            None
+        }
+    }
+    /// Replaces the root of the stack with the provided value
+    ///
+    /// Panics if the stack contains any references above the root
+    #[inline]
+    pub fn replace_root(&mut self, root: &'root mut RootT) {
+        if self.top.is_none() {
+            self.root = Some(root);
+        } else {
+            panic!("Illegal operation, unable to replace borrowed root");
         }
     }
     /// Returns the mutable reference on the top of the stack, or `None` if the stack contains only the root
@@ -69,9 +102,11 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
         self.top.as_deref_mut()
     }
     /// Returns the mutable reference on the root of the stack, consuming the stack
+    ///
+    /// Panics if the root of the stack has already been taken via [Self::take_root]
     #[inline]
     pub fn into_root(self) -> &'root mut RootT {
-        unsafe{ &mut *self.root }
+        unsafe{ &mut *self.root.unwrap() }
     }
     /// Returns the mutable reference on the top of the stack, consuming the stack, or `None` if the stack
     /// contains only the root
@@ -96,7 +131,7 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
         }
     }
     /// Returns the number of node references stored in the stack, which corresponds to the number of
-    /// times [backtrack](Self::backtrack) may be called
+    /// times [backtrack](Self::backtrack) may be called before the stack is empty
     #[inline]
     pub fn depth(&self) -> usize {
         self.stack.len() + 1
@@ -110,11 +145,13 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
     /// onto the stack
     ///
     /// If the `step_f` closure returns `None`, the stack will not be modified
+    ///
+    /// Panics if the root has been taken via [Self::take_root]
     #[inline]
     pub fn advance_from_root<F>(&mut self, step_f: F) -> bool
         where F: FnOnce(&'root mut RootT) -> Option<&'root mut NodeT>
     {
-        match step_f(unsafe{ &mut *self.root }) {
+        match step_f(unsafe{ &mut **self.root.as_ref().unwrap() }) {
             Some(new_node) => {
                 unsafe{ self.push(new_node); }
                 true
