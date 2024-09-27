@@ -9,8 +9,8 @@ pub struct MutCursorVec<'root, T: ?Sized + 'root> {
     stack: alloc::vec::Vec<*mut T>,
 }
 
-unsafe impl<'a, T> Sync for MutCursorVec<'a, T> where &'a mut T: Sync + Send {}
-unsafe impl<'a, T> Send for MutCursorVec<'a, T> where &'a mut T: Sync + Send {}
+unsafe impl<'a, T> Sync for MutCursorVec<'a, T> where &'a mut T: Sync + Send, T: ?Sized {}
+unsafe impl<'a, T> Send for MutCursorVec<'a, T> where &'a mut T: Sync + Send, T: ?Sized {}
 
 impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
     /// Returns a new `MutCursorVec` with a reference to the specified root

@@ -25,8 +25,8 @@ pub struct MutCursor<'root, T: ?Sized + 'root, const N: usize> {
     phantom: PhantomData<&'root T>,
 }
 
-unsafe impl<'a, T, const N: usize> Sync for MutCursor<'a, T, N> where &'a mut T: Sync + Send {}
-unsafe impl<'a, T, const N: usize> Send for MutCursor<'a, T, N> where &'a mut T: Sync + Send {}
+unsafe impl<'a, T, const N: usize> Sync for MutCursor<'a, T, N> where &'a mut T: Sync + Send, T: ?Sized {}
+unsafe impl<'a, T, const N: usize> Send for MutCursor<'a, T, N> where &'a mut T: Sync + Send, T: ?Sized {}
 
 impl<'root, T: ?Sized + 'root, const N: usize> MutCursor<'root, T, N> {
     /// Returns a new `MutCursor` with a reference to the specified root
