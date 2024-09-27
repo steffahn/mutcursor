@@ -14,6 +14,9 @@ pub struct MutCursorRootedVec<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'roo
     stack: alloc::vec::Vec<*mut NodeT>,
 }
 
+unsafe impl<'a, RootT, NodeT> Sync for MutCursorRootedVec<'a, RootT, NodeT> where &'a mut RootT: Sync + Send, RootT: ?Sized, &'a mut NodeT: Sync + Send, NodeT: ?Sized {}
+unsafe impl<'a, RootT, NodeT> Send for MutCursorRootedVec<'a, RootT, NodeT> where &'a mut RootT: Sync + Send, RootT: ?Sized, &'a mut NodeT: Sync + Send, NodeT: ?Sized {}
+
 impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'root, RootT, NodeT> {
     /// Returns a new `MutCursorRootedVec` with a reference to the specified root
     #[inline]
