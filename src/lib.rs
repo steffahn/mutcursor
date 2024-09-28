@@ -197,6 +197,7 @@ mod test {
     extern crate std;
     use std::*;
     use std::boxed::*;
+    use std::vec::Vec;
 
     use crate::*;
 
@@ -276,6 +277,71 @@ mod test {
             Ok(_r) => {},
             Err(_e) => {}
         }
+    }
 
+    use std::{thread, thread::ScopedJoinHandle};
+    #[test]
+    fn multi_thread_test() {
+
+        let thread_cnt = 128;
+        let mut data: Vec<TreeNode> = vec![];
+        for _ in 0..thread_cnt {
+            data.push(TreeNode::new(10));
+        }
+        let mut data_refs: Vec<&mut TreeNode> = data.iter_mut().collect();
+
+        thread::scope(|scope| {
+
+            let mut threads: Vec<ScopedJoinHandle<()>> = Vec::with_capacity(thread_cnt);
+
+            //Spawn all the threads
+            for _ in 0..thread_cnt {
+                let tree = data_refs.pop().unwrap();
+                let mut node_stack = MutCursor::<TreeNode, 7>::new(tree);
+
+                let thread = scope.spawn(move || {
+
+                    while node_stack.advance(|node| {
+                        node.traverse()
+                    }) {}
+
+                    assert_eq!(node_stack.top().val, 0);
+                    assert_eq!(node_stack.depth(), 6);
+
+                    node_stack.backtrack();
+                    assert_eq!(node_stack.top().val, 1);
+                    assert_eq!(node_stack.depth(), 5);
+
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    assert_eq!(node_stack.top().val, 4);
+                    assert_eq!(node_stack.depth(), 2);
+
+                    while node_stack.advance(|node| {
+                        node.traverse()
+                    }) {}
+                    assert_eq!(node_stack.top().val, 0);
+                    assert_eq!(node_stack.depth(), 6);
+
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    assert_eq!(node_stack.top().val, 6);
+                    assert_eq!(node_stack.depth(), 0);
+
+                    assert_eq!(node_stack.into_mut().val, 6);
+                });
+                threads.push(thread);
+            };
+
+            //Wait for them to finish
+            for thread in threads {
+                thread.join().unwrap();
+            }
+        });
     }
 }
