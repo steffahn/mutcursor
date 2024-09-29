@@ -173,7 +173,7 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
     pub fn advance<F>(&mut self, step_f: F) -> bool
         where F: FnOnce(&'root mut NodeT) -> Option<&'root mut NodeT>
     {
-        match step_f(unsafe{ self.top_mut_internal().unwrap() }) {
+        match step_f(unsafe{ self.top_mut_internal().expect("Cursor at root. Must call `advance_from_root` before `advance`") }) {
             Some(new_node) => {
                 unsafe{ self.push(new_node); }
                 true
@@ -221,5 +221,160 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
         if let Some(old_top) = old_top {
             self.stack.push(old_top as *mut NodeT);
         }
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    extern crate std;
+    use std::*;
+    use std::boxed::*;
+    use std::vec::Vec;
+
+    use crate::*;
+
+    struct TreeNode {
+        val: usize,
+        next: Option<Box<TreeNode>>
+    }
+    impl TreeNode {
+        fn new(count: usize) -> Self {
+            if count > 0 {
+                Self {val: count, next: Some(Box::new(Self::new(count-1)))}
+            } else {
+                Self {val: 0, next: None}
+            }
+        }
+        fn traverse(&mut self) -> Option<&mut Self> {
+            self.next.as_mut().map(|boxed| &mut **boxed)
+        }
+    }
+
+    #[test]
+    fn rooted_vec_basics() {
+        let mut tree = TreeNode::new(10);
+        let mut node_stack = MutCursorRootedVec::<TreeNode, TreeNode>::new(&mut tree);
+        node_stack.advance_from_root(|root| root.traverse());
+
+        while node_stack.advance(|node| {
+            node.traverse()
+        }) {}
+
+        assert_eq!(node_stack.top().unwrap().val, 0);
+        assert_eq!(node_stack.depth(), 10);
+
+        node_stack.backtrack();
+        assert_eq!(node_stack.top().unwrap().val, 1);
+        assert_eq!(node_stack.depth(), 9);
+
+        node_stack.backtrack();
+        node_stack.backtrack();
+        node_stack.backtrack();
+        assert_eq!(node_stack.top().unwrap().val, 4);
+        assert_eq!(node_stack.depth(), 6);
+
+        while node_stack.advance(|node| {
+            node.traverse()
+        }) {}
+        assert_eq!(node_stack.top().unwrap().val, 0);
+        assert_eq!(node_stack.depth(), 10);
+
+        node_stack.backtrack();
+        node_stack.backtrack();
+        node_stack.backtrack();
+        node_stack.backtrack();
+        node_stack.backtrack();
+        node_stack.backtrack();
+        assert_eq!(node_stack.top().unwrap().val, 6);
+        assert_eq!(node_stack.depth(), 4);
+
+        node_stack.backtrack();
+        node_stack.backtrack();
+        node_stack.backtrack();
+        assert_eq!(node_stack.top().unwrap().val, 9);
+        assert_eq!(node_stack.depth(), 1);
+
+        node_stack.backtrack();
+        assert!(node_stack.top().is_none());
+        assert_eq!(node_stack.root().unwrap().val, 10);
+        assert_eq!(node_stack.into_root().val, 10);
+    }
+
+    use std::{thread, thread::ScopedJoinHandle};
+    #[test]
+    fn rooted_vec_multi_thread_test() {
+
+        let thread_cnt = 128;
+        let mut data: Vec<TreeNode> = vec![];
+        for _ in 0..thread_cnt {
+            data.push(TreeNode::new(10));
+        }
+        let mut data_refs: Vec<&mut TreeNode> = data.iter_mut().collect();
+
+        thread::scope(|scope| {
+
+            let mut threads: Vec<ScopedJoinHandle<()>> = Vec::with_capacity(thread_cnt);
+
+            //Spawn all the threads
+            for _ in 0..thread_cnt {
+                let tree = data_refs.pop().unwrap();
+                let mut node_stack = MutCursorRootedVec::<TreeNode, TreeNode>::new(tree);
+
+                let thread = scope.spawn(move || {
+
+                    node_stack.advance_from_root(|root| root.traverse());
+
+                    while node_stack.advance(|node| {
+                        node.traverse()
+                    }) {}
+
+                    assert_eq!(node_stack.top().unwrap().val, 0);
+                    assert_eq!(node_stack.depth(), 10);
+
+                    node_stack.backtrack();
+                    assert_eq!(node_stack.top().unwrap().val, 1);
+                    assert_eq!(node_stack.depth(), 9);
+
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    assert_eq!(node_stack.top().unwrap().val, 4);
+                    assert_eq!(node_stack.depth(), 6);
+
+                    while node_stack.advance(|node| {
+                        node.traverse()
+                    }) {}
+                    assert_eq!(node_stack.top().unwrap().val, 0);
+                    assert_eq!(node_stack.depth(), 10);
+
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    assert_eq!(node_stack.top().unwrap().val, 6);
+                    assert_eq!(node_stack.depth(), 4);
+
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    node_stack.backtrack();
+                    assert_eq!(node_stack.top().unwrap().val, 9);
+                    assert_eq!(node_stack.depth(), 1);
+
+                    node_stack.backtrack();
+                    assert!(node_stack.top().is_none());
+                    assert_eq!(node_stack.root().unwrap().val, 10);
+                    assert_eq!(node_stack.into_root().val, 10);
+                });
+                threads.push(thread);
+            };
+
+            //Wait for them to finish
+            for thread in threads {
+                thread.join().unwrap();
+            }
+        });
     }
 }
