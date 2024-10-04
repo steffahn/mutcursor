@@ -200,13 +200,27 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
             }
         }
     }
-    /// Pops all references from the stack, exposing the root reference as the [top](Self::top)
+    /// Pops all references from the stack, exposing the root reference via [root](Self::root)
     ///
-    /// This method does nothing if the stack is already at the root
+    /// This method does nothing if the stack is already at the root.
     #[inline]
     pub fn to_root(&mut self) {
         self.stack.clear();
         self.top = None;
+    }
+    /// Pops all references beyond the first from the stack, exposing the first reference
+    /// created by [advance_from_root](Self::advance_from_root) as the [top](Self::top)
+    ///
+    /// This method does nothing if the stack is already at the root or the first node reference.
+    #[inline]
+    pub fn to_bottom(&mut self) {
+        if self.stack.len() > 0 {
+            self.stack.truncate(1);
+            match self.stack.pop() {
+                Some(top_ptr) => self.top = Some( unsafe{ &mut *top_ptr }),
+                None => debug_assert!(self.top.is_none())
+            }
+        }
     }
     /// Private
     #[inline]
