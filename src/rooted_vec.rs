@@ -135,9 +135,16 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
     }
     /// Returns the number of node references stored in the stack, which corresponds to the number of
     /// times [backtrack](Self::backtrack) may be called before the stack is empty
+    ///
+    /// The root does not count, so a `MutCursorRootedVec` containing only the `RootT` will return
+    /// `depth() == 0`.
     #[inline]
     pub fn depth(&self) -> usize {
-        self.stack.len() + 1
+        if self.top.is_some() {
+            self.stack.len() + 1
+        } else {
+            0
+        }
     }
     /// Returns the number of node references the stack is capable of holding without reallocation
     #[inline]
