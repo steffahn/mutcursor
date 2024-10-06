@@ -207,6 +207,20 @@ impl<'root, RootT: ?Sized + 'root, NodeT: ?Sized + 'root> MutCursorRootedVec<'ro
             }
         }
     }
+    /// Pops a reference from the stack, exposing prior reference as the new [top](Self::top),
+    /// but, unlike [backtrack](Self::backtrack) this method will not pop the bottom NodeT reference,
+    /// and will never panic!()
+    ///
+    /// This method will do nothing if it is called when [depth](Self::depth) is `<= 1`
+    #[inline]
+    pub fn try_backtrack_node(&mut self) {
+        match self.stack.pop() {
+            Some(top_ptr) => {
+                self.top = Some( unsafe{ &mut *top_ptr } );
+            },
+            None => {}
+        }
+    }
     /// Pops all references from the stack, exposing the root reference via [root](Self::root)
     ///
     /// This method does nothing if the stack is already at the root.
