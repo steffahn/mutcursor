@@ -1,4 +1,5 @@
 
+use core::ptr::NonNull;
 extern crate alloc;
 
 /// Similar to [MutCursor](crate::MutCursor), but allows for a dynamically growing stack
@@ -6,7 +7,7 @@ extern crate alloc;
 /// `MutCursorVec` is not available if the `no_std` feature is set
 pub struct MutCursorVec<'root, T: ?Sized + 'root> {
     top: &'root mut T,
-    stack: alloc::vec::Vec<*mut T>,
+    stack: alloc::vec::Vec<NonNull<T>>,
 }
 
 unsafe impl<'a, T> Sync for MutCursorVec<'a, T> where &'a mut T: Sync + Send, T: ?Sized {}
@@ -93,8 +94,8 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
     #[inline]
     pub fn backtrack(&mut self) {
         match self.stack.pop() {
-            Some(top_ptr) => {
-                self.top = unsafe{ &mut *top_ptr };
+            Some(mut top_ptr) => {
+                self.top = unsafe{ top_ptr.as_mut() };
             },
             None => panic!("MutCursor must contain valid reference")
         }
@@ -106,8 +107,8 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
     pub fn to_root(&mut self) {
         if self.stack.len() > 0 {
             self.stack.truncate(1);
-            let top_ptr = self.stack.pop().unwrap();
-            self.top = unsafe{ &mut *top_ptr };
+            let mut top_ptr = self.stack.pop().unwrap();
+            self.top = unsafe{ top_ptr.as_mut() };
         }
     }
     /// Private
@@ -117,9 +118,9 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
     }
     /// Private
     #[inline]
-    unsafe fn push(&mut self, t_ref: &'root mut T) {
-        self.stack.push(self.top as *mut T);
-        self.top = t_ref;
+    unsafe fn push(&mut self, mut t_ref: &'root mut T) {
+        core::mem::swap(&mut t_ref, &mut self.top);
+        self.stack.push(NonNull::from(t_ref));
     }
 }
 

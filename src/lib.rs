@@ -2,6 +2,7 @@
 
 #![no_std]
 
+use core::ptr::NonNull;
 use core::mem::MaybeUninit;
 use core::marker::PhantomData;
 
@@ -21,7 +22,7 @@ pub use rooted_vec::*;
 pub struct MutCursor<'root, T: ?Sized + 'root, const N: usize> {
     cnt: usize, //The last item cannot be removed, so cnt==0 means there is 1 item
     top: usize,
-    stack: [MaybeUninit<*mut T>; N],
+    stack: [MaybeUninit<NonNull<T>>; N],
     phantom: PhantomData<&'root T>,
 }
 
@@ -39,13 +40,13 @@ impl<'root, T: ?Sized + 'root, const N: usize> MutCursor<'root, T, N> {
             stack: [MaybeUninit::uninit(); N],
             phantom: PhantomData::default(),
         };
-        unsafe{ *stack.stack.get_unchecked_mut(0) = MaybeUninit::new(root); }
+        unsafe{ *stack.stack.get_unchecked_mut(0) = MaybeUninit::new(NonNull::from(root)); }
         stack
     }
     /// Returns a const reference from the mutable reference on the top of the stack
     #[inline]
     pub fn top(&self) -> &T {
-        unsafe{ &**self.stack.get_unchecked(self.top).as_ptr() }
+        unsafe{ self.stack.get_unchecked(self.top).assume_init().as_ref() }
     }
     /// Returns the mutable reference on the top of the stack 
     #[inline]
@@ -137,8 +138,7 @@ impl<'root, T: ?Sized + 'root, const N: usize> MutCursor<'root, T, N> {
     {
         match step_f(unsafe{ self.top_mut_internal() }) {
             Some(new_node) => {
-                let node_ptr = new_node as *mut T;
-                unsafe{ self.push(node_ptr); }
+                unsafe{ self.push(NonNull::from(new_node)); }
                 true
             },
             None => false
@@ -162,11 +162,11 @@ impl<'root, T: ?Sized + 'root, const N: usize> MutCursor<'root, T, N> {
     /// Private
     #[inline]
     unsafe fn top_mut_internal(&mut self) -> &'root mut T {
-        unsafe{ &mut **self.stack[self.top].as_mut_ptr() }
+        unsafe{ self.stack[self.top].assume_init().as_mut() }
     }
     /// Private
     #[inline]
-    unsafe fn push(&mut self, t: *mut T) {
+    unsafe fn push(&mut self, t: NonNull<T>) {
         if self.top + 1 < N {
             self.top = self.top + 1;
         } else {

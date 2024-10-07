@@ -1,4 +1,5 @@
 
+use core::ptr::NonNull;
 extern crate alloc;
 
 /// Similar to [MutCursorVec](crate::MutCursorVec), but provides for a `RootT` type at the bottom of the
@@ -13,9 +14,9 @@ extern crate alloc;
 ///
 /// `MutCursorRootedVec` is not available if the `no_std` feature is set
 pub struct MutCursorRootedVec<RootT, NodeT: ?Sized> {
-    top: Option<*mut NodeT>,
+    top: Option<NonNull<NodeT>>,
     root: Option<RootT>,
-    stack: alloc::vec::Vec<*mut NodeT>,
+    stack: alloc::vec::Vec<NonNull<NodeT>>,
 }
 
 unsafe impl<RootT, NodeT> Sync for MutCursorRootedVec<RootT, NodeT> where RootT: Sync + Send, NodeT: Sync + Send, NodeT: ?Sized {}
@@ -61,7 +62,7 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     /// stack contains only the root
     #[inline]
     pub fn top(&self) -> Option<&NodeT> {
-        self.top.map(|node_ptr| unsafe{ &*node_ptr })
+        self.top.map(|node_ptr| unsafe{ node_ptr.as_ref() })
     }
     /// Returns the mutable reference on the root of the stack, or `None` if the stack contains additional
     /// references obscuring the root
@@ -99,7 +100,7 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     /// Returns the mutable reference on the top of the stack, or `None` if the stack contains only the root
     #[inline]
     pub fn top_mut(&mut self) -> Option<&mut NodeT> {
-        self.top.map(|node_ptr| unsafe{ &mut *node_ptr })
+        self.top.map(|mut node_ptr| unsafe{ node_ptr.as_mut() })
     }
     /// Returns the mutable reference on the root of the stack, consuming the stack
     ///
@@ -140,7 +141,7 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
         match step_f(self.root.as_mut().unwrap()) {
             Some(new_node) => {
                 self.stack.clear();
-                self.top = Some(new_node as *mut NodeT);
+                self.top = Some(NonNull::from(new_node));
                 true
             },
             None => false
@@ -160,10 +161,10 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     {
         match step_f(self.top_mut().expect("Cursor at root. Must call `advance_from_root` before `advance`")) {
             Some(new_node) => {
-                let mut old_top = Some(new_node as *mut NodeT);
+                let mut old_top = Some(NonNull::from(new_node));
                 core::mem::swap(&mut old_top, &mut self.top);
                 if let Some(old_top) = old_top {
-                    self.stack.push(old_top as *mut NodeT);
+                    self.stack.push(NonNull::from(old_top));
                 }
                 true
             },
@@ -178,7 +179,7 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     pub fn backtrack(&mut self) {
         match self.stack.pop() {
             Some(top_ptr) => {
-                self.top = Some( unsafe{ &mut *top_ptr } );
+                self.top = Some(top_ptr);
             },
             None => {
                 if self.top.is_some() {
@@ -198,7 +199,7 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     pub fn try_backtrack_node(&mut self) {
         match self.stack.pop() {
             Some(top_ptr) => {
-                self.top = Some( unsafe{ &mut *top_ptr } );
+                self.top = Some(top_ptr);
             },
             None => {}
         }
@@ -220,7 +221,7 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
         if self.stack.len() > 0 {
             self.stack.truncate(1);
             match self.stack.pop() {
-                Some(top_ptr) => self.top = Some( unsafe{ &mut *top_ptr }),
+                Some(top_ptr) => self.top = Some(top_ptr),
                 None => debug_assert!(self.top.is_none())
             }
         }
