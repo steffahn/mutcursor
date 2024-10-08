@@ -102,6 +102,25 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     pub fn top_mut(&mut self) -> Option<&mut NodeT> {
         self.top.map(|mut node_ptr| unsafe{ node_ptr.as_mut() })
     }
+    /// Returns the mutable reference on the top of the stack.  If the stack contains only the root, this
+    /// method will behave as if [advance_if_empty](Self::advance_if_empty) was called prior to [top_mut](Self::top_mut)
+    ///
+    /// Panics if the root has been taken via [Self::take_root]
+    #[inline]
+    pub fn top_or_advance_mut<F>(&mut self, step_f: F) -> &mut NodeT
+        where F: FnOnce(&mut RootT) -> &mut NodeT
+    {
+        match &self.top {
+            Some(mut node_ptr) => unsafe{ node_ptr.as_mut() },
+            None => {
+                let new_node = step_f(self.root.as_mut().unwrap());
+                debug_assert_eq!(self.stack.len(), 0);
+                let mut node_ptr = NonNull::from(new_node);
+                self.top = Some(node_ptr);
+                unsafe{ node_ptr.as_mut() }
+            }
+        }
+    }
     /// Returns the mutable reference on the root of the stack, consuming the stack
     ///
     /// Panics if the root of the stack has already been taken via [Self::take_root]
@@ -127,8 +146,22 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     pub fn capacity(&self) -> usize {
         self.stack.capacity() + 1
     }
+    /// Begins the traversal if the stack contains only the root, otherwise does nothing
+    ///
+    /// Panics if the root has been taken via [Self::take_root]
+    #[inline]
+    pub fn advance_if_empty<F>(&mut self, step_f: F)
+        where F: FnOnce(&mut RootT) -> &mut NodeT
+    {
+        if self.top.is_none() {
+            let new_node = step_f(self.root.as_mut().unwrap());
+            debug_assert_eq!(self.stack.len(), 0);
+            let node_ptr = NonNull::from(new_node);
+            self.top = Some(node_ptr);
+        }
+    }
     /// Begins the traversal by stepping from the root to the first node, pushing the first node
-    /// reference onto the stack
+    /// reference onto the stack.  Effectively resets the stack
     ///
     /// If the `step_f` closure returns `Some` the existing stack will be replaced.
     /// If the `step_f` closure returns `None`, the stack will not be modified.
