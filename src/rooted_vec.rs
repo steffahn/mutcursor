@@ -22,9 +22,8 @@ pub struct MutCursorRootedVec<RootT, NodeT: ?Sized> {
     stack: alloc::vec::Vec<NonNull<NodeT>>,
 }
 
-//QUESTION: are we being overly conservative here?  I followed the pattern from Arc: https://github.com/rust-lang/rust/blob/7e6bf003f396aeea510577b4e925d1d95c12ff53/library/alloc/src/sync.rs#L248
-unsafe impl<RootT, NodeT> Sync for MutCursorRootedVec<RootT, NodeT> where RootT: Sync + Send, NodeT: Sync + Send, NodeT: ?Sized {}
-unsafe impl<RootT, NodeT> Send for MutCursorRootedVec<RootT, NodeT> where RootT: Sync + Send, NodeT: Sync + Send, NodeT: ?Sized {}
+unsafe impl<RootT, NodeT> Sync for MutCursorRootedVec<RootT, NodeT> where RootT: Sync, NodeT: Sync, NodeT: ?Sized {}
+unsafe impl<RootT, NodeT> Send for MutCursorRootedVec<RootT, NodeT> where RootT: Send, NodeT: Send, NodeT: ?Sized {}
 
 impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     /// Returns a new `MutCursorRootedVec` with a reference to the specified root
