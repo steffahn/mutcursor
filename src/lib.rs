@@ -23,11 +23,11 @@ pub struct MutCursor<'root, T: ?Sized + 'root, const N: usize> {
     cnt: usize, //The last item cannot be removed, so cnt==0 means there is 1 item
     top: usize,
     stack: [MaybeUninit<NonNull<T>>; N],
-    phantom: PhantomData<&'root T>,
+    phantom: PhantomData<&'root mut T>, //Variance
 }
 
-unsafe impl<'a, T, const N: usize> Sync for MutCursor<'a, T, N> where &'a mut T: Sync + Send, T: ?Sized {}
-unsafe impl<'a, T, const N: usize> Send for MutCursor<'a, T, N> where &'a mut T: Sync + Send, T: ?Sized {}
+unsafe impl<'a, T, const N: usize> Sync for MutCursor<'a, T, N> where T: Sync, T: ?Sized {}
+unsafe impl<'a, T, const N: usize> Send for MutCursor<'a, T, N> where T: Send, T: ?Sized {}
 
 impl<'root, T: ?Sized + 'root, const N: usize> MutCursor<'root, T, N> {
     /// Returns a new `MutCursor` with a reference to the specified root
@@ -134,7 +134,7 @@ impl<'root, T: ?Sized + 'root, const N: usize> MutCursor<'root, T, N> {
     /// stack will be lost.
     #[inline]
     pub fn advance<F>(&mut self, step_f: F) -> bool
-        where F: FnOnce(&'root mut T) -> Option<&'root mut T>
+        where F: FnOnce(&mut T) -> Option<&mut T>
     {
         match step_f(unsafe{ self.top_mut_internal() }) {
             Some(new_node) => {
@@ -196,8 +196,7 @@ impl<'root, T: ?Sized, const N: usize> core::ops::DerefMut for MutCursor<'root, 
 mod test {
     extern crate std;
     use std::*;
-    use std::boxed::*;
-    use std::vec::Vec;
+    use std::{boxed::*, vec::Vec, string::String};
 
     use crate::*;
 
@@ -277,6 +276,52 @@ mod test {
             Ok(_r) => {},
             Err(_e) => {}
         }
+    }
+
+    /// Demonstrates an API soundness issue that was problematic in a prior version of the crate
+    /// See https://github.com/luketpeterson/mutcursor/issues/1
+    #[test]
+    fn try_to_alias_mut_with_advance() {
+        let mut x = 1;
+        let mut c = MutCursor::<_, 1>::new(&mut x);
+        #[allow(unused_mut)]
+        let mut _r1: Option<&mut i32> = None;
+        c.advance(|_r| {
+            // _r1 = Some(_r); //Good.  Can't escape the closure anymore
+            None
+        });
+        #[allow(unused_mut)]
+        let mut _r2: Option<&mut i32> = None;
+        c.advance(|_r| {
+            // _r2 = Some(_r); //Good.  Can't escape the closure anymore
+            None
+        });
+        // Have we aliased the mutable references?!?
+    }
+
+    /// Demonstrates an API soundness issue that was problematic in a prior version of the crate
+    /// See https://github.com/luketpeterson/mutcursor/issues/1
+    #[test]
+    fn test_variance() {
+        let mut dummy = String::new();
+        let mut dummy_ref = &mut dummy;
+        #[allow(unused_mut)]
+        let mut _c = MutCursor::<_, 1>::new(&mut dummy_ref);
+        {
+            #[allow(unused_mut)]
+            let mut _hello = String::from("hello!");
+            // covariance allows turning `MutCursor<'a, &'long mut String, 1>` into
+            // `MutCursor<'a, &'short mut String, 1>`, where the `'short` lifetime now
+            // can be shorter than the original lifetime of `dummy_ref`
+            // 
+            // (I believe the coercion actually already happens when `c` gets assigned above,
+            // but even without that, you could imagine inserting a `let c = c as _;` step
+            // that makes this more explicit)
+
+            // *_c.top_mut() = &mut _hello; // this sets `dummy_ref` to point to `hello` //Good.  Can't assign to reference shorter lifetime anymore!
+            println!("{}", dummy_ref); // hello!
+        }
+        println!("{}", dummy_ref); // <garbage> (use-after-free)
     }
 
     use std::{thread, thread::ScopedJoinHandle};

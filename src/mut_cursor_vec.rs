@@ -1,25 +1,28 @@
 
 use core::ptr::NonNull;
+use core::marker::PhantomData;
 extern crate alloc;
 
 /// Similar to [MutCursor](crate::MutCursor), but allows for a dynamically growing stack
 ///
 /// `MutCursorVec` is not available if the `no_std` feature is set
 pub struct MutCursorVec<'root, T: ?Sized + 'root> {
-    top: &'root mut T,
+    top: NonNull<T>,
     stack: alloc::vec::Vec<NonNull<T>>,
+    phantom: PhantomData<&'root mut T>, //Variance
 }
 
-unsafe impl<'a, T> Sync for MutCursorVec<'a, T> where &'a mut T: Sync + Send, T: ?Sized {}
-unsafe impl<'a, T> Send for MutCursorVec<'a, T> where &'a mut T: Sync + Send, T: ?Sized {}
+unsafe impl<'a, T> Sync for MutCursorVec<'a, T> where T: Sync, T: ?Sized {}
+unsafe impl<'a, T> Send for MutCursorVec<'a, T> where T: Send, T: ?Sized {}
 
 impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
     /// Returns a new `MutCursorVec` with a reference to the specified root
     #[inline]
     pub fn new(root: &'root mut T) -> Self {
         Self {
-            top: root,
+            top: root.into(),
             stack: alloc::vec::Vec::new(),
+            phantom: PhantomData::default(),
         }
     }
     /// Returns a new `MutCursorVec` with a reference to the specified root, and an allocated buffer
@@ -27,24 +30,25 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
     #[inline]
     pub fn new_with_capacity(root: &'root mut T, capacity: usize) -> Self {
         Self {
-            top: root,
+            top: root.into(),
             stack: alloc::vec::Vec::with_capacity(capacity),
+            phantom: PhantomData::default(),
         }
     }
     /// Returns a const reference from the mutable reference on the top of the stack
     #[inline]
     pub fn top(&self) -> &T {
-        self.top
+        unsafe{ self.top.as_ref() }
     }
     /// Returns the mutable reference on the top of the stack 
     #[inline]
     pub fn top_mut(&mut self) -> &mut T {
-        self.top
+        unsafe{ self.top.as_mut() }
     }
     /// Returns the mutable reference on the top of the stack, consuming the stack
     #[inline]
-    pub fn into_mut(self) -> &'root mut T {
-        self.top
+    pub fn into_mut(mut self) -> &'root mut T {
+        unsafe{ self.top.as_mut() }
     }
     /// Consumes the stack and returns a mutable reference to an object with the `'root` lifetime,
     /// if a closure returns `Ok`, otherwise returns the stack and a custom error value
@@ -78,7 +82,7 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
     /// method returns `false`.
     #[inline]
     pub fn advance<F>(&mut self, step_f: F) -> bool
-        where F: FnOnce(&'root mut T) -> Option<&'root mut T>
+        where F: FnOnce(&mut T) -> Option<&mut T>
     {
         match step_f(unsafe{ self.top_mut_internal() }) {
             Some(new_node) => {
@@ -94,8 +98,8 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
     #[inline]
     pub fn backtrack(&mut self) {
         match self.stack.pop() {
-            Some(mut top_ptr) => {
-                self.top = unsafe{ top_ptr.as_mut() };
+            Some(top_ptr) => {
+                self.top = top_ptr;
             },
             None => panic!("MutCursor must contain valid reference")
         }
@@ -107,20 +111,20 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
     pub fn to_root(&mut self) {
         if self.stack.len() > 0 {
             self.stack.truncate(1);
-            let mut top_ptr = self.stack.pop().unwrap();
-            self.top = unsafe{ top_ptr.as_mut() };
+            self.top = self.stack.pop().unwrap();
         }
     }
     /// Private
     #[inline]
     unsafe fn top_mut_internal(&mut self) -> &'root mut T {
-        unsafe{ &mut *(self.top as *mut T) }
+        unsafe{ self.top.as_mut() }
     }
     /// Private
     #[inline]
-    unsafe fn push(&mut self, mut t_ref: &'root mut T) {
-        core::mem::swap(&mut t_ref, &mut self.top);
-        self.stack.push(NonNull::from(t_ref));
+    unsafe fn push(&mut self, t_ref: &'root mut T) {
+        let mut top_ptr: NonNull<T> = t_ref.into();
+        core::mem::swap(&mut top_ptr, &mut self.top);
+        self.stack.push(top_ptr);
     }
 }
 
@@ -200,5 +204,15 @@ mod test {
         assert_eq!(node_stack.depth(), 4);
 
         assert_eq!(node_stack.into_mut().val, 6);
+    }
+
+    /// See https://github.com/luketpeterson/mutcursor/issues/1#issuecomment-2549242493
+    #[test]
+    fn miri_tagging_issue() {
+        let x = &mut 0;
+        let mut c = MutCursorVec::new(x);
+        c.advance(|x| Some(x));
+        c.backtrack();
+        println!("{}", c.top());
     }
 }

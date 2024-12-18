@@ -5,6 +5,9 @@ extern crate alloc;
 /// Similar to [MutCursorVec](crate::MutCursorVec), but provides for a `RootT` type at the bottom of the
 /// stack that is different from the `NodeT` types above it
 ///
+/// **WARNING** If `RootT` is not a smart-pointer (e.g. when it owns the memory it references)
+/// `MutCursorRootedVec` will definitely do UB! See <https://github.com/luketpeterson/mutcursor/issues/2>
+///
 /// Usage Note: This type owns (as opposed to borrows) the root object from which the rest of the
 /// stack descends, therefore, it has no associated lifetime.  Often the RootT type is a pointer
 /// itself, in which case it is the responsibility of the crate's user to maintain proper variance.
@@ -19,13 +22,17 @@ pub struct MutCursorRootedVec<RootT, NodeT: ?Sized> {
     stack: alloc::vec::Vec<NonNull<NodeT>>,
 }
 
+//QUESTION: are we being overly conservative here?  I followed the pattern from Arc: https://github.com/rust-lang/rust/blob/7e6bf003f396aeea510577b4e925d1d95c12ff53/library/alloc/src/sync.rs#L248
 unsafe impl<RootT, NodeT> Sync for MutCursorRootedVec<RootT, NodeT> where RootT: Sync + Send, NodeT: Sync + Send, NodeT: ?Sized {}
 unsafe impl<RootT, NodeT> Send for MutCursorRootedVec<RootT, NodeT> where RootT: Sync + Send, NodeT: Sync + Send, NodeT: ?Sized {}
 
 impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     /// Returns a new `MutCursorRootedVec` with a reference to the specified root
+    ///
+    /// **Warning** This type has serious safety limits, so constructing it is unsafe.  `RootT` must
+    /// be a smart-pointer type, e.g. [Arc](alloc::sync::Arc).
     #[inline]
-    pub fn new(root: RootT) -> Self {
+    pub unsafe fn new(root: RootT) -> Self {
         Self {
             top: None,
             root: Some(root),
@@ -291,7 +298,7 @@ mod test {
     #[test]
     fn rooted_vec_basics() {
         let tree = TreeNode::new(10);
-        let mut node_stack = MutCursorRootedVec::<TreeNode, TreeNode>::new(tree);
+        let mut node_stack: MutCursorRootedVec::<TreeNode, TreeNode> = unsafe{ MutCursorRootedVec::new(tree) };
         node_stack.advance_from_root(|root| root.traverse());
 
         while node_stack.advance(|node| {
@@ -355,7 +362,7 @@ mod test {
             //Spawn all the threads
             for _ in 0..thread_cnt {
                 let tree = data.pop().unwrap();
-                let mut node_stack = MutCursorRootedVec::<TreeNode, TreeNode>::new(tree);
+                let mut node_stack: MutCursorRootedVec::<TreeNode, TreeNode> = unsafe{ MutCursorRootedVec::new(tree) };
 
                 let thread = scope.spawn(move || {
 
