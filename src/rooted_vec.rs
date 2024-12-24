@@ -2,9 +2,8 @@
 use core::{marker::PhantomData, ops::DerefMut, ptr::NonNull};
 use maybe_dangling::MaybeDangling;
 use stable_deref_trait::StableDeref;
-extern crate alloc;
 
-/// Similar to [MutCursorVec](crate::MutCursorVec), but provides for a `RootT` type at the bottom of the
+/// Similar to [`MutCursorVec`](crate::MutCursorVec), but provides for a `RootT` type at the bottom of the
 /// stack that is different from the `NodeT` types above it
 ///
 /// Usage Note: This type owns (as opposed to borrows) the root object from which the rest of the
@@ -17,13 +16,14 @@ extern crate alloc;
 /// at run-time.
 ///
 /// To give another example: If `RootT` is a container type `SomeRoot<'a>` containing `&'a mut NoteT`
-/// that you want to [advance][MutCursorRootedVec::advance_if_empty] into,
+/// that you want to [`advance`][MutCursorRootedVec::advance_if_empty] into,
 /// you could use `MutCursorRootedVec<'a, SomeRoot<'a>, NodeT>`.
 ///
-/// `MutCursorRootedVec` doesn't implement [Deref](core::ops::Deref), and accessors return [Option], so therefore it is
+/// `MutCursorRootedVec` doesn't implement [`Deref`](core::ops::Deref), and accessors return [`Option`], so therefore it is
 /// allowed to be empty, unlike some of the other types in this crate.
 ///
-/// `MutCursorRootedVec` is not available if the `alloc` feature is disabled. (The feature is enabled by default.)
+/// `MutCursorRootedVec` is not available if the [`alloc`](crate::features#alloc) feature is disabled.
+/// (The feature is enabled by default.)
 pub struct MutCursorRootedVec<'l, RootT: 'l, NodeT: ?Sized + 'l> {
     top: Option<NonNull<NodeT>>,
     root: MaybeDangling<Option<RootT>>,
@@ -303,7 +303,7 @@ impl<'l, RootT: 'l, NodeT: ?Sized + 'l> MutCursorRootedVec<'l, RootT, NodeT> {
             None => false
         }
     }
-    /// Pops a reference from the stack, exposing the prior reference as the new [top](Self::top)
+    /// Pops a reference from the stack, exposing the prior reference as the new [`top`](Self::top)
     ///
     /// If the last node entry has been removed, only the root will remain. This method will panic if
     /// it is called when the stack contains only the root
@@ -322,11 +322,11 @@ impl<'l, RootT: 'l, NodeT: ?Sized + 'l> MutCursorRootedVec<'l, RootT, NodeT> {
             }
         }
     }
-    /// Pops a reference from the stack, exposing prior reference as the new [top](Self::top),
-    /// but, unlike [backtrack](Self::backtrack) this method will not pop the bottom NodeT reference,
+    /// Pops a reference from the stack, exposing prior reference as the new [`top`](Self::top),
+    /// but, unlike [`backtrack`](Self::backtrack) this method will not pop the bottom NodeT reference,
     /// and will never panic!()
     ///
-    /// This method will do nothing if it is called when [depth](Self::depth) is `<= 1`
+    /// This method will do nothing if it is called when [`depth`](Self::depth) is `<= 1`
     #[inline]
     pub fn try_backtrack_node(&mut self) {
         match self.stack.pop() {
@@ -336,7 +336,7 @@ impl<'l, RootT: 'l, NodeT: ?Sized + 'l> MutCursorRootedVec<'l, RootT, NodeT> {
             None => {}
         }
     }
-    /// Pops all references from the stack, exposing the root reference via [root](Self::root)
+    /// Pops all references from the stack, exposing the root reference via [`root`](Self::root)
     ///
     /// This method does nothing if the stack is already at the root.
     #[inline]
@@ -345,7 +345,7 @@ impl<'l, RootT: 'l, NodeT: ?Sized + 'l> MutCursorRootedVec<'l, RootT, NodeT> {
         self.stack.clear();
     }
     /// Pops all references beyond the first from the stack, exposing the first reference
-    /// created by [advance_from_root](Self::advance_from_root) as the [top](Self::top)
+    /// created by [`advance_from_root`](Self::advance_from_root) as the [`top`](Self::top)
     ///
     /// This method does nothing if the stack is already at the root or the first node reference.
     #[inline]
@@ -363,7 +363,6 @@ impl<'l, RootT: 'l, NodeT: ?Sized + 'l> MutCursorRootedVec<'l, RootT, NodeT> {
 
 #[cfg(test)]
 mod test {
-    extern crate std;
     use std::*;
     use std::boxed::*;
     use std::vec::Vec;
