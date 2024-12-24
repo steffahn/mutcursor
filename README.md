@@ -5,7 +5,7 @@ This crate provides types to safely store mutable references to parent nodes, fo
 
 [MutCursor] is more efficient because it avoids dynamic allocation, while [MutCursorVec] provides for an arbitrarily deep stack.
 
-[MutCursorRootedVec] supports mutable references to a separate root type and a different leaf type.  In the future I may generalize this pattern to be more flexible.  **WARNING** `MutCursorRootedVec` is unsound when the root object owns the memory it references!
+[MutCursorRootedVec] supports mutable references to a separate root type and a different leaf type.  In the future I may generalize this pattern to be more flexible.
 
 ## Usage
 ```rust
