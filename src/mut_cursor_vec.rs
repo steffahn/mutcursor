@@ -5,7 +5,7 @@ extern crate alloc;
 
 /// Similar to [MutCursor](crate::MutCursor), but allows for a dynamically growing stack
 ///
-/// `MutCursorVec` is not available if the `no_std` feature is set
+/// `MutCursorVec` is not available if the `alloc` feature is disabled. (The feature is enabled by default.)
 pub struct MutCursorVec<'root, T: ?Sized + 'root> {
     top: NonNull<T>,
     stack: alloc::vec::Vec<NonNull<T>>,
