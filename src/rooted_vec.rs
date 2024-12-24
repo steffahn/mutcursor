@@ -30,9 +30,19 @@ pub struct MutCursorRootedVec<'l, RootT: 'l, NodeT: ?Sized + 'l> {
     stack: alloc::vec::Vec<NonNull<NodeT>>,
     _marker: PhantomData<(&'l RootT, &'l mut NodeT)>, // root covariant, node invariant
 }
-// TODO
-// unsafe impl<RootT, NodeT> Sync for MutCursorRootedVec<RootT, NodeT> where RootT: Sync, NodeT: Sync, NodeT: ?Sized {}
-// unsafe impl<RootT, NodeT> Send for MutCursorRootedVec<RootT, NodeT> where RootT: Send, NodeT: Send, NodeT: ?Sized {}
+
+unsafe impl<'l, RootT, NodeT: ?Sized> Sync for MutCursorRootedVec<'l, RootT, NodeT>
+where
+    RootT: Sync,
+    NodeT: Sync,
+{
+}
+unsafe impl<'l, RootT, NodeT: ?Sized> Send for MutCursorRootedVec<'l, RootT, NodeT>
+where
+    RootT: Send,
+    NodeT: Send,
+{
+}
 
 impl<'l, RootT: 'l, NodeT: ?Sized + 'l> MutCursorRootedVec<'l, RootT, NodeT> {
     /// Returns a new `MutCursorRootedVec` with a reference to the specified root
@@ -372,16 +382,19 @@ mod test {
                 Self {val: 0, next: None}
             }
         }
+        fn traverse_to_box(&mut self) -> Option<&mut Box<Self>> {
+            self.next.as_mut()
+        }
         fn traverse(&mut self) -> Option<&mut Self> {
-            self.next.as_mut().map(|boxed| &mut **boxed)
+            self.traverse_to_box().map(|boxed| boxed as _)
         }
     }
 
     #[test]
     fn rooted_vec_basics() {
         let tree = TreeNode::new(10);
-        let mut node_stack: MutCursorRootedVec::<TreeNode, TreeNode> = unsafe{ MutCursorRootedVec::new(tree) };
-        node_stack.advance_from_root(|root| root.traverse());
+        let mut node_stack: MutCursorRootedVec::<TreeNode, TreeNode> = MutCursorRootedVec::new(tree);
+        node_stack.advance_from_root(|root| root.traverse_to_box());
 
         while node_stack.advance(|node| {
             node.traverse()
@@ -444,11 +457,11 @@ mod test {
             //Spawn all the threads
             for _ in 0..thread_cnt {
                 let tree = data.pop().unwrap();
-                let mut node_stack: MutCursorRootedVec::<TreeNode, TreeNode> = unsafe{ MutCursorRootedVec::new(tree) };
+                let mut node_stack: MutCursorRootedVec::<TreeNode, TreeNode> = MutCursorRootedVec::new(tree);
 
                 let thread = scope.spawn(move || {
 
-                    node_stack.advance_from_root(|root| root.traverse());
+                    node_stack.advance_from_root(|root| root.traverse_to_box());
 
                     while node_stack.advance(|node| {
                         node.traverse()
