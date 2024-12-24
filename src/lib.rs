@@ -7,16 +7,16 @@ use core::ptr::NonNull;
 use core::mem::MaybeUninit;
 use core::marker::PhantomData;
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 mod mut_cursor_vec;
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub use mut_cursor_vec::*;
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 mod rooted_vec;
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub use rooted_vec::*;
 
 /// Stores a stack of `&mut` references, only allowing access to the top element on the stack

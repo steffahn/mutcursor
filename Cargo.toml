@@ -13,8 +13,8 @@ categories = ["no-std", "algorithms", "data-structures", "rust-patterns"]
 [dependencies]
 
 [features]
-default = ["std"]
-std = []
+default = ["alloc"]
+alloc = []
 
 [package.metadata.docs.rs]
 all-features = true
