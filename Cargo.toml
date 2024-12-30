@@ -11,10 +11,16 @@ keywords = ["traversal", "tree", "backtacking", "stack", "cursor"]
 categories = ["no-std", "algorithms", "data-structures", "rust-patterns"]
 
 [dependencies]
+maybe-dangling = { version = "0.1.1", optional = true}
+stable_deref_trait = { version = "1.2.0", default-features = false, optional = true, features = ["alloc"] }
 
 [features]
-default = ["alloc"]
-alloc = []
+default = ["std"]
+# Enables the `MutCursorVec` and `MutCursorRootedVec` APIs.
+alloc = ["dep:maybe-dangling", "dep:stable_deref_trait"]
+# Enables `std` support for `StableDeref`, so you use std-only stable pointers
+# without needing to depend on `stable_deref_trait` yourself.
+std = ["alloc", "stable_deref_trait/std"]
 
 [package.metadata.docs.rs]
 all-features = true

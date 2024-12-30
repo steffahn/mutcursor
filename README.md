@@ -3,9 +3,9 @@
 
 This crate provides types to safely store mutable references to parent nodes, for backtracking during traversal of tree & graph structures.
 
-[MutCursor] is more efficient because it avoids dynamic allocation, while [MutCursorVec] provides for an arbitrarily deep stack.
+[`MutCursor`] is more efficient because it avoids dynamic allocation, while [`MutCursorVec`] provides for an arbitrarily deep stack.
 
-[MutCursorRootedVec] supports mutable references to a separate root type and a different leaf type.  In the future I may generalize this pattern to be more flexible.  **WARNING** `MutCursorRootedVec` is unsound when the root object owns the memory it references!
+[`MutCursorRootedVec`] supports mutable references to a separate root type and a different leaf type.  In the future I may generalize this pattern to be more flexible.
 
 ## Usage
 ```rust
@@ -49,15 +49,15 @@ impl TreeNode {
 
 This crate basically does the same thing as [generic-cursors](https://crates.io/crates/generic-cursors). However, there are several reasons to choose this crate:
 
-1. The fixed-size stack used by [MutCursor] has lower overhead than a [Vec](https://doc.rust-lang.org/std/vec/struct.Vec.html), and can be used in a `no_std` environment where dynamic allocation may be unavailable.
+1. The fixed-size stack used by [`MutCursor`] has lower overhead than a [`Vec`], and can be used in a `no_std` environment where dynamic allocation may be unavailable.
 
-2. The [MutCursor::try_map_into_mut] API enables some paterns that would be otherwise impossible.
+2. The [`MutCursor::try_map_into_mut`] API enables some patterns that would be otherwise impossible.
 
 ## Safety Thesis
 
-Each `&mut` reference stored by a [MutCursor] mutably borrows the reference beneath it in the stack.  The stack root takes a mutable (and therefore exclusive) borrow of the node itself.  Therefore the stack's [top](MutCursor::top) is an exclusive borrow.
+Each `&mut` reference stored by a [`MutCursor`] mutably borrows the reference beneath it in the stack.  The stack root takes a mutable (and therefore exclusive) borrow of the node itself.  Therefore the stack's [`top`] is an exclusive borrow.
 
-You can imagine unrolling tree traversal into something like the code below, but this isn't amenable to looping.  In essence each `level` variable is preserved, but inaccessible because the level above is mutably borrowing it.  The [MutCursor] object contains all the `level` variables but only provides access to the [top](MutCursor::top)
+You can imagine unrolling tree traversal into something like the code below, but this isn't amenable to looping.  In essence each `level` variable is preserved, but inaccessible because the level above is mutably borrowing it.  The [`MutCursor`] object contains all the `level` variables but only provides access to the [`top`].
 
 ```rust ignore
 let level_1 = &mut root;
@@ -76,12 +76,19 @@ let level_1 = &mut root;
 
 #### Macro to define cursor types
 
-In the current design of [MutCursorRootedVec], there is a predefined pattern prescribing where `RootT` and `NodeT` types may exist on the stack.  However, we may find it necessary in the future to support more than two types, in a more flexible pattern.  It seems that a macro to define a bespoke cursor type is the best solutuion.
+In the current design of [`MutCursorRootedVec`], there is a predefined pattern prescribing where `RootT` and `NodeT` types may exist on the stack.  However, we may find it necessary in the future to support more than two types, in a more flexible pattern.  It seems that a macro to define a bespoke cursor type is the best solutuion.
 
 #### Internal enum for multiple-type support at runtime
 
-For ultimate flexibility, we would want all the references to be stored by the stack as in an enum over the possible reference types.  However, if ther user provided an enum as a type parameter to a cursor type, the result result would be double-indirection.  Therefore the enum behavior would need to be internal to the MutCursor.  Deriving a MutCursor from a user's enum type feels like a friendly way to define the types a cursor type is capable of storing.
+For ultimate flexibility, we would want all the references to be stored by the stack as in an enum over the possible reference types.  However, if the user provided an enum as a type parameter to a cursor type, the result result would be double-indirection.  Therefore the enum behavior would need to be internal to the MutCursor.  Deriving a MutCursor from a user's enum type feels like a friendly way to define the types a cursor type is capable of storing.
 
 ## Acknowledgements
 
 [Frank Steffahn](https://github.com/steffahn) identified soundness issues and potential improvements in prior versions of this crate.
+
+[`MutCursor`]: https://docs.rs/mutcursor/latest/mutcursor/struct.MutCursor.html
+[`top`]: https://docs.rs/mutcursor/latest/mutcursor/struct.MutCursor.html#method.top
+[`MutCursor::try_map_into_mut`]: https://docs.rs/mutcursor/latest/mutcursor/struct.MutCursor.html#method.try_map_into_mut
+[`MutCursorVec`]: https://docs.rs/mutcursor/latest/mutcursor/struct.MutCursorVec.html
+[`MutCursorRootedVec`]: https://docs.rs/mutcursor/latest/mutcursor/struct.MutCursorRootedVec.html
+[`Vec`]: https://doc.rust-lang.org/std/vec/struct.Vec.html

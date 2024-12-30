@@ -1,11 +1,11 @@
 
 use core::ptr::NonNull;
 use core::marker::PhantomData;
-extern crate alloc;
 
-/// Similar to [MutCursor](crate::MutCursor), but allows for a dynamically growing stack
+/// Similar to [`MutCursor`](crate::MutCursor), but allows for a dynamically growing stack
 ///
-/// `MutCursorVec` is not available if the `alloc` feature is disabled. (The feature is enabled by default.)
+/// `MutCursorVec` is not available if the [`alloc`](crate::features#alloc) feature is disabled.
+/// (The feature is enabled by default.)
 pub struct MutCursorVec<'root, T: ?Sized + 'root> {
     top: NonNull<T>,
     stack: alloc::vec::Vec<NonNull<T>>,
@@ -65,7 +65,7 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
         }
     }
     /// Returns the number of excess references stored in the stack, which corresponds to the number of
-    /// times [backtrack](Self::backtrack) may be called
+    /// times [`backtrack`](Self::backtrack) may be called
     #[inline]
     pub fn depth(&self) -> usize {
         self.stack.len()
@@ -92,7 +92,7 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
             None => false
         }
     }
-    /// Pops a reference from the stack, exposing the prior reference as the new [top](Self::top)
+    /// Pops a reference from the stack, exposing the prior reference as the new [`top`](Self::top)
     ///
     /// This method will panic if the stack contains only 1 entry
     #[inline]
@@ -104,7 +104,7 @@ impl<'root, T: ?Sized + 'root> MutCursorVec<'root, T> {
             None => panic!("MutCursor must contain valid reference")
         }
     }
-    /// Pops all references from the stack, exposing the root reference as the [top](Self::top)
+    /// Pops all references from the stack, exposing the root reference as the [`top`](Self::top)
     ///
     /// This method does nothing if the stack is already at the root
     #[inline]
@@ -143,7 +143,6 @@ impl<'root, T: ?Sized> core::ops::DerefMut for MutCursorVec<'root, T> {
 
 #[cfg(test)]
 mod test {
-    extern crate std;
     use std::*;
     use std::boxed::*;
 

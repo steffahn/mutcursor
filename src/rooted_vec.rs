@@ -1,41 +1,58 @@
 
-use core::ptr::NonNull;
-extern crate alloc;
+use core::{marker::PhantomData, ops::DerefMut, ptr::NonNull};
+use maybe_dangling::MaybeDangling;
+use stable_deref_trait::StableDeref;
 
-/// Similar to [MutCursorVec](crate::MutCursorVec), but provides for a `RootT` type at the bottom of the
+/// Similar to [`MutCursorVec`](crate::MutCursorVec), but provides for a `RootT` type at the bottom of the
 /// stack that is different from the `NodeT` types above it
 ///
-/// **WARNING** If `RootT` is not a smart-pointer (e.g. when it owns the memory it references)
-/// `MutCursorRootedVec` will definitely do UB! See <https://github.com/luketpeterson/mutcursor/issues/2>
-///
 /// Usage Note: This type owns (as opposed to borrows) the root object from which the rest of the
-/// stack descends, therefore, it has no associated lifetime.  Often the RootT type is a pointer
-/// itself, in which case it is the responsibility of the crate's user to maintain proper variance.
+/// stack descends, therefore, it can be used without an associated lifetime. For API soundness,
+/// you still have to define a “lower bound” for type validity.
 ///
-/// `MutCursorRootedVec` doesn't implement [Deref](core::ops::Deref), and accessors return [Option], so therefore it is
+/// In many cases, you can however simply use
+/// `MutCursorRootedVec<'static, RootT, NodeT>`. This requires `RootT: 'static` and `NodeT: 'static`
+/// which are validity bound on the *types* but these don't imply that any data must *actually* life that long
+/// at run-time.
+///
+/// To give another example: If `RootT` is a container type `SomeRoot<'a>` containing `&'a mut NoteT`
+/// that you want to [`advance`][MutCursorRootedVec::advance_if_empty] into,
+/// you could use `MutCursorRootedVec<'a, SomeRoot<'a>, NodeT>`.
+///
+/// `MutCursorRootedVec` doesn't implement [`Deref`](core::ops::Deref), and accessors return [`Option`], so therefore it is
 /// allowed to be empty, unlike some of the other types in this crate.
 ///
-/// `MutCursorRootedVec` is not available if the `alloc` feature is disabled. (The feature is enabled by default.)
-pub struct MutCursorRootedVec<RootT, NodeT: ?Sized> {
+/// `MutCursorRootedVec` is not available if the [`alloc`](crate::features#alloc) feature is disabled.
+/// (The feature is enabled by default.)
+pub struct MutCursorRootedVec<'l, RootT: 'l, NodeT: ?Sized + 'l> {
     top: Option<NonNull<NodeT>>,
-    root: Option<RootT>,
+    root: MaybeDangling<Option<RootT>>,
     stack: alloc::vec::Vec<NonNull<NodeT>>,
+    _marker: PhantomData<(&'l RootT, &'l mut NodeT)>, // root covariant, node invariant
 }
 
-unsafe impl<RootT, NodeT> Sync for MutCursorRootedVec<RootT, NodeT> where RootT: Sync, NodeT: Sync, NodeT: ?Sized {}
-unsafe impl<RootT, NodeT> Send for MutCursorRootedVec<RootT, NodeT> where RootT: Send, NodeT: Send, NodeT: ?Sized {}
+unsafe impl<'l, RootT, NodeT: ?Sized> Sync for MutCursorRootedVec<'l, RootT, NodeT>
+where
+    RootT: Sync,
+    NodeT: Sync,
+{
+}
+unsafe impl<'l, RootT, NodeT: ?Sized> Send for MutCursorRootedVec<'l, RootT, NodeT>
+where
+    RootT: Send,
+    NodeT: Send,
+{
+}
 
-impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
+impl<'l, RootT: 'l, NodeT: ?Sized + 'l> MutCursorRootedVec<'l, RootT, NodeT> {
     /// Returns a new `MutCursorRootedVec` with a reference to the specified root
-    ///
-    /// **Warning** This type has serious safety limits, so constructing it is unsafe.  `RootT` must
-    /// be a smart-pointer type, e.g. [Arc](alloc::sync::Arc).
     #[inline]
-    pub unsafe fn new(root: RootT) -> Self {
+    pub fn new(root: RootT) -> Self {
         Self {
             top: None,
-            root: Some(root),
+            root: MaybeDangling::new(Some(root)),
             stack: alloc::vec::Vec::new(),
+            _marker: PhantomData,
         }
     }
     /// Returns a new `MutCursorRootedVec` with a reference to the specified root, and an allocated
@@ -44,8 +61,9 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     pub fn new_with_capacity(root: RootT, capacity: usize) -> Self {
         Self {
             top: None,
-            root: Some(root),
+            root: MaybeDangling::new(Some(root)),
             stack: alloc::vec::Vec::with_capacity(capacity),
+            _marker: PhantomData,
         }
     }
     /// Returns `true` if the stack contains only the root, otherwise returns `false` if the stack
@@ -86,11 +104,8 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     /// This method effectively dumps the entire stack contents.
     #[inline]
     pub fn take_root(&mut self) -> Option<RootT> {
-        let mut root = None;
-        core::mem::swap(&mut self.root, &mut root);
-        self.top = None;
-        self.stack.clear();
-        Some(root.unwrap())
+        self.to_root();
+        self.root.take()
     }
     /// Replaces the root of the stack with the provided value
     ///
@@ -98,7 +113,7 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     #[inline]
     pub fn replace_root(&mut self, root: RootT) {
         if self.top.is_none() {
-            self.root = Some(root);
+            *self.root = Some(root);
         } else {
             panic!("Illegal operation, unable to replace borrowed root");
         }
@@ -109,18 +124,51 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
         self.top.map(|mut node_ptr| unsafe{ node_ptr.as_mut() })
     }
     /// Returns the mutable reference on the top of the stack.  If the stack contains only the root, this
-    /// method will behave as if [advance_if_empty](Self::advance_if_empty) was called prior to [top_mut](Self::top_mut)
+    /// method will behave as if [`advance_if_empty`](Self::advance_if_empty) was called prior
+    /// to [`top_mut`](Self::top_mut).
     ///
-    /// Panics if the root has been taken via [Self::take_root]
+    /// Panics if the root has been taken via [`Self::take_root`]
     #[inline]
-    pub fn top_or_advance_mut<F>(&mut self, step_f: F) -> &mut NodeT
-        where F: FnOnce(&mut RootT) -> &mut NodeT
+    pub fn top_or_advance_mut<F, NodeRef>(&mut self, step_f: F) -> &mut NodeT
+    where
+        F: FnOnce(&mut RootT) -> &mut NodeRef,
+        NodeRef: DerefMut<Target = NodeT> + StableDeref + 'l,
+        // Due to the effects of implied bounds, this   ^^^^  is important for soundness
     {
         match &self.top {
             Some(mut node_ptr) => unsafe{ node_ptr.as_mut() },
             None => {
-                let new_node = step_f(self.root.as_mut().unwrap());
                 debug_assert_eq!(self.stack.len(), 0);
+                let new_node_stable_ref = step_f(self.root.as_mut().unwrap());
+                let mut node_ptr = NonNull::from(&mut **new_node_stable_ref);
+                self.top = Some(node_ptr);
+                unsafe{ node_ptr.as_mut() }
+            }
+        }
+    }
+    /// Returns the mutable reference on the top of the stack.  If the stack contains only the root, this
+    /// method will behave as if [`advance_if_empty_twostep`](Self::advance_if_empty_twostep) was called prior
+    /// to [`top_mut`](Self::top_mut).
+    ///
+    /// Panics if the root has been taken via [`Self::take_root`]
+    ///
+    /// This version of [`top_or_advance_mut`][Self::top_or_advance_mut] supports
+    /// a second step, when the `RootT` doesn't contain any stable pointers
+    /// *directly* to a `NodeT`.
+    #[inline]
+    pub fn top_or_advance_mut_twostep<F, G, IntermediateRef>(&mut self, step_f1: F, step_f2: G) -> &mut NodeT
+    where
+        F: FnOnce(&mut RootT) -> &mut IntermediateRef,
+        IntermediateRef: DerefMut + StableDeref + 'l,
+        // Due to the effects of implied bounds ^^^^ this is important for soundness
+        G: FnOnce(&mut IntermediateRef::Target) -> &mut NodeT,
+    {
+        match &self.top {
+            Some(mut node_ptr) => unsafe{ node_ptr.as_mut() },
+            None => {
+                debug_assert_eq!(self.stack.len(), 0);
+                let intermediate_stable_ref = step_f1(self.root.as_mut().unwrap());
+                let new_node = step_f2(intermediate_stable_ref);
                 let mut node_ptr = NonNull::from(new_node);
                 self.top = Some(node_ptr);
                 unsafe{ node_ptr.as_mut() }
@@ -129,10 +177,10 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     }
     /// Returns the mutable reference on the root of the stack, consuming the stack
     ///
-    /// Panics if the root of the stack has already been taken via [Self::take_root]
+    /// Panics if the root of the stack has already been taken via [`Self::take_root`]
     #[inline]
     pub fn into_root(self) -> RootT {
-        self.root.unwrap()
+        MaybeDangling::into_inner(self.root).unwrap()
     }
     /// Returns the number of node references stored in the stack, which corresponds to the number of
     /// times [backtrack](Self::backtrack) may be called before the stack is empty
@@ -154,37 +202,83 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     }
     /// Begins the traversal if the stack contains only the root, otherwise does nothing
     ///
-    /// Panics if the root has been taken via [Self::take_root]
+    /// Panics if the root has been taken via [`Self::take_root`]
     #[inline]
-    pub fn advance_if_empty<F>(&mut self, step_f: F)
-        where F: FnOnce(&mut RootT) -> &mut NodeT
+    pub fn advance_if_empty<F, NodeRef>(&mut self, step_f: F)
+    where
+        F: FnOnce(&mut RootT) -> &mut NodeRef,
+        NodeRef: DerefMut<Target = NodeT> + StableDeref + 'l,
+        // Due to the effects of implied bounds, this   ^^^^  is important for soundness
+    {
+        self.advance_if_empty_twostep(step_f, |node| node);
+    }
+    /// Begins the traversal if the stack contains only the root, otherwise does nothing
+    ///
+    /// Panics if the root has been taken via [`Self::take_root`]
+    ///
+    /// This version of [`advance_if_empty`][Self::advance_if_empty] supports
+    /// a second step, when the `RootT` doesn't contain any stable pointers
+    /// *directly* to a `NodeT`.
+    #[inline]
+    pub fn advance_if_empty_twostep<F, G, IntermediateRef>(&mut self, step_f1: F, step_f2: G)
+    where
+        F: FnOnce(&mut RootT) -> &mut IntermediateRef,
+        IntermediateRef: DerefMut + StableDeref + 'l,
+        // Due to the effects of implied bounds ^^^^ this is important for soundness
+        G: FnOnce(&mut IntermediateRef::Target) -> &mut NodeT,
     {
         if self.top.is_none() {
-            let new_node = step_f(self.root.as_mut().unwrap());
             debug_assert_eq!(self.stack.len(), 0);
+            let intermediate_stable_ref = step_f1(self.root.as_mut().unwrap());
+            let new_node = step_f2(intermediate_stable_ref);
             let node_ptr = NonNull::from(new_node);
             self.top = Some(node_ptr);
         }
     }
     /// Begins the traversal by stepping from the root to the first node, pushing the first node
-    /// reference onto the stack.  Effectively resets the stack
+    /// reference onto the stack. Always resets the stack.
     ///
-    /// If the `step_f` closure returns `Some` the existing stack will be replaced.
-    /// If the `step_f` closure returns `None`, the stack will not be modified.
+    /// If the `step_f` closure returns `Some` the existing stack will be replaced with the new node.
+    /// If the `step_f` closure returns `None` the stack will be left completely empty.
     ///
-    /// Panics if the root has been taken via [Self::take_root]
+    /// Panics if the root has been taken via [`Self::take_root`]
     #[inline]
-    pub fn advance_from_root<F>(&mut self, step_f: F) -> bool
-        where F: FnOnce(&mut RootT) -> Option<&mut NodeT>
+    pub fn advance_from_root<F, NodeRef>(&mut self, step_f: F) -> bool
+    where
+        F: FnOnce(&mut RootT) -> Option<&mut NodeRef>,
+        NodeRef: DerefMut<Target = NodeT> + StableDeref + 'l,
+        // Due to the effects of implied bounds, this   ^^^^  is important for soundness
     {
-        match step_f(self.root.as_mut().unwrap()) {
-            Some(new_node) => {
-                self.stack.clear();
-                self.top = Some(NonNull::from(new_node));
-                true
-            },
-            None => false
+        self.advance_from_root_twostep(step_f, |node| Some(node))
+    }
+    /// Begins the traversal by stepping from the root to the first node, pushing the first node
+    /// reference onto the stack. Always resets the stack.
+    ///
+    /// If either of the `step_f…` closures returns `Some` the existing stack will be replaced with the new node.
+    /// If either of the `step_f…` closures returns `None` the stack will be left completely empty.
+    ///
+    /// Panics if the root has been taken via [`Self::take_root`]
+    ///
+    /// This version of [`advance_from_root`][Self::advance_from_root] supports
+    /// a second step, when the `RootT` doesn't contain any stable pointers
+    /// *directly* to a `NodeT`.
+    #[inline]
+    pub fn advance_from_root_twostep<F, G, IntermediateRef>(&mut self, step_f1: F, step_f2: G) -> bool
+    where
+        F: FnOnce(&mut RootT) -> Option<&mut IntermediateRef>,
+        IntermediateRef: DerefMut + StableDeref + 'l,
+        // Due to the effects of implied bounds ^^^^ this is important for soundness
+        G: FnOnce(&mut IntermediateRef::Target) -> Option<&mut NodeT>,
+    {
+        self.to_root();
+        if let Some(intermediate_stable_ref) = step_f1(self.root.as_mut().unwrap()) {
+            if let Some(new_node) = step_f2(intermediate_stable_ref) {
+                let node_ptr = NonNull::from(new_node);
+                self.top = Some(node_ptr);
+                return true;
+            }
         }
+        false
     }
     /// Steps deeper into the traversal, pushing a new reference onto the top of the stack
     ///
@@ -200,17 +294,16 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
     {
         match step_f(self.top_mut().expect("Cursor at root. Must call `advance_from_root` before `advance`")) {
             Some(new_node) => {
-                let mut old_top = Some(NonNull::from(new_node));
-                core::mem::swap(&mut old_top, &mut self.top);
-                if let Some(old_top) = old_top {
-                    self.stack.push(NonNull::from(old_top));
+                let new_ptr = NonNull::from(new_node);
+                if let Some(old_top) = self.top.replace(new_ptr) {
+                    self.stack.push(old_top);
                 }
                 true
             },
             None => false
         }
     }
-    /// Pops a reference from the stack, exposing the prior reference as the new [top](Self::top)
+    /// Pops a reference from the stack, exposing the prior reference as the new [`top`](Self::top)
     ///
     /// If the last node entry has been removed, only the root will remain. This method will panic if
     /// it is called when the stack contains only the root
@@ -229,11 +322,11 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
             }
         }
     }
-    /// Pops a reference from the stack, exposing prior reference as the new [top](Self::top),
-    /// but, unlike [backtrack](Self::backtrack) this method will not pop the bottom NodeT reference,
+    /// Pops a reference from the stack, exposing prior reference as the new [`top`](Self::top),
+    /// but, unlike [`backtrack`](Self::backtrack) this method will not pop the bottom NodeT reference,
     /// and will never panic!()
     ///
-    /// This method will do nothing if it is called when [depth](Self::depth) is `<= 1`
+    /// This method will do nothing if it is called when [`depth`](Self::depth) is `<= 1`
     #[inline]
     pub fn try_backtrack_node(&mut self) {
         match self.stack.pop() {
@@ -243,16 +336,16 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
             None => {}
         }
     }
-    /// Pops all references from the stack, exposing the root reference via [root](Self::root)
+    /// Pops all references from the stack, exposing the root reference via [`root`](Self::root)
     ///
     /// This method does nothing if the stack is already at the root.
     #[inline]
     pub fn to_root(&mut self) {
-        self.stack.clear();
         self.top = None;
+        self.stack.clear();
     }
     /// Pops all references beyond the first from the stack, exposing the first reference
-    /// created by [advance_from_root](Self::advance_from_root) as the [top](Self::top)
+    /// created by [`advance_from_root`](Self::advance_from_root) as the [`top`](Self::top)
     ///
     /// This method does nothing if the stack is already at the root or the first node reference.
     #[inline]
@@ -270,7 +363,6 @@ impl<RootT, NodeT: ?Sized> MutCursorRootedVec<RootT, NodeT> {
 
 #[cfg(test)]
 mod test {
-    extern crate std;
     use std::*;
     use std::boxed::*;
     use std::vec::Vec;
@@ -289,16 +381,19 @@ mod test {
                 Self {val: 0, next: None}
             }
         }
+        fn traverse_to_box(&mut self) -> Option<&mut Box<Self>> {
+            self.next.as_mut()
+        }
         fn traverse(&mut self) -> Option<&mut Self> {
-            self.next.as_mut().map(|boxed| &mut **boxed)
+            self.traverse_to_box().map(|boxed| boxed as _)
         }
     }
 
     #[test]
     fn rooted_vec_basics() {
         let tree = TreeNode::new(10);
-        let mut node_stack: MutCursorRootedVec::<TreeNode, TreeNode> = unsafe{ MutCursorRootedVec::new(tree) };
-        node_stack.advance_from_root(|root| root.traverse());
+        let mut node_stack: MutCursorRootedVec::<TreeNode, TreeNode> = MutCursorRootedVec::new(tree);
+        node_stack.advance_from_root(|root| root.traverse_to_box());
 
         while node_stack.advance(|node| {
             node.traverse()
@@ -361,11 +456,11 @@ mod test {
             //Spawn all the threads
             for _ in 0..thread_cnt {
                 let tree = data.pop().unwrap();
-                let mut node_stack: MutCursorRootedVec::<TreeNode, TreeNode> = unsafe{ MutCursorRootedVec::new(tree) };
+                let mut node_stack: MutCursorRootedVec::<TreeNode, TreeNode> = MutCursorRootedVec::new(tree);
 
                 let thread = scope.spawn(move || {
 
-                    node_stack.advance_from_root(|root| root.traverse());
+                    node_stack.advance_from_root(|root| root.traverse_to_box());
 
                     while node_stack.advance(|node| {
                         node.traverse()

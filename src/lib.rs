@@ -1,7 +1,55 @@
+// Overrides for `docs.rs` links in the README. This first definition takes precedence.
+
+// fix broken links if documented without `alloc`:
+#![cfg_attr(not(feature = "alloc"), doc = "[`MutCursorVec`]: features#alloc")]
+#![cfg_attr(not(feature = "alloc"), doc = "[`MutCursorRootedVec`]: features#alloc")]
+
+// more precise links to `std`/`alloc` when possible:
+#![cfg_attr(feature = "std", doc = "[Vec]: std::vec::Vec")]
+#![cfg_attr(feature = "alloc", doc = "[Vec]: alloc::vec::Vec")]
+
+// Normal link to crate items:
+//! [`MutCursor`]: MutCursor
+//! [`top`]: MutCursor::top
+//! [`MutCursor::try_map_into_mut`]: MutCursor::try_map_into_mut
+//! [`MutCursorVec`]: MutCursorVec
+//! [`MutCursorRootedVec`]: MutCursorRootedVec
+
 #![doc = include_str!("../README.md")]
 
-#![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+
+#![no_std]
+
+#[cfg(any(test, feature = "alloc"))]
+extern crate alloc;
+#[cfg(any(test, feature = "std"))]
+#[cfg_attr(test, macro_use)]
+extern crate std;
+
+#[cfg(doc)]
+#[cfg_attr(docsrs, doc(cfg(doc)))]
+pub mod features {
+    //! Description of the crate features (not a real module).
+    //!
+    //! ## `default`
+    //! The default features of this crate include `std` and `alloc`
+    //! ## `alloc`
+    //! Enables usage of the `alloc` crate, and a public dependency on
+    //! [`stable_deref_trait`] at version `1.*`
+    //!
+    #![cfg_attr(not(feature = "alloc"), doc = "Enables the `MutCursorVec` and `MutCursorRootedVec` APIs.")]
+    #![cfg_attr(feature = "alloc", doc = "Enables the [`MutCursorVec`] and [`MutCursorRootedVec`] APIs.")]
+    //! ## `std`
+    //! Enables `std` support for [`StableDeref`], so you use std-only stable pointers
+    //! without needing to depend on [`stable_deref_trait`] yourself.
+    //!
+    #![cfg_attr(feature = "alloc", doc = "[`stable_deref_trait`]: stable_deref_trait")]
+    #![cfg_attr(feature = "alloc", doc = "[`StableDeref`]: stable_deref_trait::StableDeref")]
+    //! [`stable_deref_trait`]: https://docs.rs/stable_deref_trait/1/stable_deref_trait/
+    //! [`StableDeref`]: https://docs.rs/stable_deref_trait/1/stable_deref_trait/trait.StableDeref.html
+    use super::*;
+}
 
 use core::ptr::NonNull;
 use core::mem::MaybeUninit;
@@ -21,7 +69,7 @@ pub use rooted_vec::*;
 
 /// Stores a stack of `&mut` references, only allowing access to the top element on the stack
 ///
-/// The `MutCursor` stores `N` `&mut T` references, but only allows access to the [top](Self::top)
+/// The `MutCursor` stores `N` `&mut T` references, but only allows access to the [`top`](Self::top)
 pub struct MutCursor<'root, T: ?Sized + 'root, const N: usize> {
     cnt: usize, //The last item cannot be removed, so cnt==0 means there is 1 item
     top: usize,
@@ -147,7 +195,7 @@ impl<'root, T: ?Sized + 'root, const N: usize> MutCursor<'root, T, N> {
             None => false
         }
     }
-    /// Pops a reference from the stack, exposing the prior reference as the new [top](Self::top)
+    /// Pops a reference from the stack, exposing the prior reference as the new [`top`](Self::top)
     ///
     /// This method will panic if the stack contains only 1 entry
     #[inline]
@@ -197,7 +245,6 @@ impl<'root, T: ?Sized, const N: usize> core::ops::DerefMut for MutCursor<'root, 
 
 #[cfg(test)]
 mod test {
-    extern crate std;
     use std::*;
     use std::{boxed::*, vec::Vec, string::String};
 
