@@ -13,4 +13,9 @@ categories = ["no-std", "algorithms", "data-structures", "rust-patterns"]
 [dependencies]
 
 [features]
-no_std = []
+default = ["alloc"]
+alloc = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--generate-link-to-definition"]

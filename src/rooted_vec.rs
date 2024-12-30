@@ -15,7 +15,7 @@ extern crate alloc;
 /// `MutCursorRootedVec` doesn't implement [Deref](core::ops::Deref), and accessors return [Option], so therefore it is
 /// allowed to be empty, unlike some of the other types in this crate.
 ///
-/// `MutCursorRootedVec` is not available if the `no_std` feature is set
+/// `MutCursorRootedVec` is not available if the `alloc` feature is disabled. (The feature is enabled by default.)
 pub struct MutCursorRootedVec<RootT, NodeT: ?Sized> {
     top: Option<NonNull<NodeT>>,
     root: Option<RootT>,

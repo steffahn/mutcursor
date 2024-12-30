@@ -1,19 +1,22 @@
 #![doc = include_str!("../README.md")]
 
 #![no_std]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 use core::ptr::NonNull;
 use core::mem::MaybeUninit;
 use core::marker::PhantomData;
 
-#[cfg(not(feature = "no_std"))]
+#[cfg(feature = "alloc")]
 mod mut_cursor_vec;
-#[cfg(not(feature = "no_std"))]
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub use mut_cursor_vec::*;
 
-#[cfg(not(feature = "no_std"))]
+#[cfg(feature = "alloc")]
 mod rooted_vec;
-#[cfg(not(feature = "no_std"))]
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub use rooted_vec::*;
 
 /// Stores a stack of `&mut` references, only allowing access to the top element on the stack
